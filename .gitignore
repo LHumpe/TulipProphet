@@ -12,3 +12,6 @@
 
 # Local Data Folder
 /local_output/
+
+# Scratch files
+/tulipprophet/scratch.py
