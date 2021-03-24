@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from collections import Counter
 from typing import Optional, Tuple, Any, List
 
 import numpy as np
@@ -72,14 +73,16 @@ class CryptoHistoryProphetProcessor:
     def train_test_split(data: pd.DataFrame,
                          train_size: float, val_size: float,
                          shuffle_data: bool = False) -> Tuple[Any, Any, Any]:
-        if shuffle_data:
-            data = shuffle(data, random_state=2)
-
         data_len = len(data)
 
         train = data.iloc[0:int(train_size * data_len)]
         validation = data.iloc[int(train_size * data_len):int(data_len * (train_size + val_size))]
         test = data.iloc[int(data_len * (train_size + val_size)):]
+
+        if shuffle_data:
+            train = shuffle(train, random_state=2)
+            validation = shuffle(validation, random_state=2)
+            test = shuffle(test, random_state=2)
 
         train.index = train.date.factorize()[0]
         validation.index = validation.date.factorize()[0]
@@ -215,6 +218,15 @@ class CryptoNewsProphetProcessor:
         text = re.sub('[0-9]{3}', '###', text)
         text = re.sub('[0-9]{2}', '##', text)
         return text
+
+    def get_max_tokens(self, threshold: int) -> int:
+        results = Counter()
+        for col in self.rel_cols:
+            self._prep_data[col].str.lower().str.split().apply(results.update)
+
+        rel_words = [word for word, count in results.items() if count >= threshold]
+
+        return len(rel_words)
 
     @property
     def prep_data(self) -> pd.DataFrame:
