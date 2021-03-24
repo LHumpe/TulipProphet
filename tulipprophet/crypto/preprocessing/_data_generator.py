@@ -38,7 +38,6 @@ class CryptoWindowGenerator:
         ds = ds.batch(batch_size=self.batch_size)
 
         ds = ds.cache().prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
-
         return ds
 
     @property

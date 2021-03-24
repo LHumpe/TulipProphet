@@ -1,10 +1,15 @@
+import os
+
 import tensorflow as tf
 
 from crypto.io import read_kraken_history, read_json_news
 from crypto.models import CryptoDirectionModel
 from crypto.preprocessing import CryptoHistoryProphetProcessor, CryptoWindowGenerator, \
     CryptoNewsProphetProcessor
+
 if __name__ == '__main__':
+    tf.get_logger().setLevel('WARN')
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     news_data = read_json_news(
         '/mnt/ShareDrive/Development/Privat/TulipArena/singles/TulipProphet/local_input/cointelegraph.json')
 
@@ -19,7 +24,7 @@ if __name__ == '__main__':
         data=data,
         tech_indicators=['macd', 'rsi_30', 'cci_30', 'dx_30']
     )
-    engineer.slice_data(start='2018-01-01').preprocess_data()
+    engineer.preprocess_data()
 
     final_data = engineer.merge_with_news(news_data=prepped_news_data)
     train_df, val_df, test_df = engineer.train_test_split(final_data, train_size=0.7, val_size=0.2, shuffle_data=True)
@@ -34,13 +39,17 @@ if __name__ == '__main__':
         label_col=['fall', 'neutral', 'rise'],
     )
 
-    max_tokens = news_processor.get_max_tokens(threshold=15)
+    bdy_max_tokens = news_processor.get_max_tokens(data=prepped_news_data['body'], threshold=15)
+    ttl_max_tokens = news_processor.get_max_tokens(data=prepped_news_data['title'], threshold=15)
+    bdy_seq_len = news_processor.get_sequence_len(data=prepped_news_data['body'], threshold=75)
+    ttl_seq_len = news_processor.get_sequence_len(data=prepped_news_data['title'], threshold=75)
 
     predictor = CryptoDirectionModel(
         data_generator=windows,
-        max_tokens=max_tokens,
-        seq_title=50,
-        seq_body=800,
+        bdy_max_tokens=bdy_max_tokens,
+        ttl_max_tokens=ttl_max_tokens,
+        seq_title=ttl_seq_len,
+        seq_body=bdy_seq_len,
         indicator_len=len(['macd', 'rsi_30', 'cci_30', 'dx_30']),
         embedding_dim=16,
         max_epochs=100,
@@ -49,9 +58,12 @@ if __name__ == '__main__':
 
     predictor.tune(
         callbacks=[
-            tf.keras.callbacks.TensorBoard(log_dir="/mnt/ShareDrive/Development/Privat/TulipArena/singles/TulipProphet/local_output/logdir/tune/"),
+            tf.keras.callbacks.TensorBoard(
+                log_dir="/mnt/ShareDrive/Development/Privat/TulipArena/singles/TulipProphet/local_output/logdir/tune/",
+                histogram_freq=1,
+            ),
             tf.keras.callbacks.EarlyStopping(
-                monitor='val_loss', min_delta=0, patience=20, verbose=0, mode='auto',
+                monitor='val_accuracy', min_delta=0, patience=10, verbose=0, mode='auto',
                 baseline=None, restore_best_weights=False
             ),
         ],

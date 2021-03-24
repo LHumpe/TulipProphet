@@ -73,6 +73,7 @@ class CryptoHistoryProphetProcessor:
     def train_test_split(data: pd.DataFrame,
                          train_size: float, val_size: float,
                          shuffle_data: bool = False) -> Tuple[Any, Any, Any]:
+        data = data.sort_values(by='date')
         data_len = len(data)
 
         train = data.iloc[0:int(train_size * data_len)]
@@ -219,14 +220,19 @@ class CryptoNewsProphetProcessor:
         text = re.sub('[0-9]{2}', '##', text)
         return text
 
-    def get_max_tokens(self, threshold: int) -> int:
+    @staticmethod
+    def get_max_tokens(data: pd.DataFrame, threshold: int) -> int:
         results = Counter()
-        for col in self.rel_cols:
-            self._prep_data[col].str.lower().str.split().apply(results.update)
+
+        data.str.lower().str.split().apply(results.update)
 
         rel_words = [word for word, count in results.items() if count >= threshold]
 
         return len(rel_words)
+
+    @staticmethod
+    def get_sequence_len(data: pd.DataFrame, threshold: int) -> int:
+        return int(np.percentile(data.str.split().apply(len), threshold))
 
     @property
     def prep_data(self) -> pd.DataFrame:
