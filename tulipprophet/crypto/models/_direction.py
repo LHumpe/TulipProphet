@@ -13,6 +13,7 @@ NEWS_EMBEDDINGS_HP_BOUNDS = {
     'hp_dropout_level_two': [0.4, 0.8, 0.2],
 }
 
+
 class CryptoDirectionModel:
 
     def __init__(self, data_generator: CryptoWindowGenerator,
@@ -243,13 +244,13 @@ class CryptoDirectionModel:
         return model
 
     def _tune(self, callbacks: list, store_partial: bool = False):
-        self.tuner = kt.BayesianOptimization(self._build_model,
-                                             objective='val_accuracy',
-                                             overwrite=True,
-                                             directory=self.tune_dir,
-                                             project_name=self.project_name,
-                                             max_trials=self.max_epochs
-                                             )
+        self.tuner = kt.Hyperband(self._build_model,
+                                  objective='val_accuracy',
+                                  overwrite=True,
+                                  directory=self.tune_dir,
+                                  project_name=self.project_name,
+                                  max_epochs=self.max_epochs
+                                  )
         self.tuner.search(
             self.train_df,
             validation_data=self.val_df,

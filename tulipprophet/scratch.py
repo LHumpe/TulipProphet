@@ -7,6 +7,10 @@ from crypto.models import CryptoDirectionModel
 from crypto.preprocessing import CryptoHistoryProphetProcessor, CryptoWindowGenerator, \
     CryptoNewsProphetProcessor
 
+gpu_devices = tf.config.experimental.list_physical_devices('GPU')
+for device in gpu_devices:
+    tf.config.experimental.set_memory_growth(device, True)
+
 if __name__ == '__main__':
     tf.get_logger().setLevel('WARN')
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -60,12 +64,11 @@ if __name__ == '__main__':
         callbacks=[
             tf.keras.callbacks.TensorBoard(
                 log_dir="/mnt/ShareDrive/Development/Privat/TulipArena/singles/TulipProphet/local_output/logdir/tune/",
-                histogram_freq=1,
             ),
-            tf.keras.callbacks.EarlyStopping(
-                monitor='val_accuracy', min_delta=0, patience=10, verbose=0, mode='auto',
-                baseline=None, restore_best_weights=False
-            ),
+            # tf.keras.callbacks.EarlyStopping(
+            #     monitor='val_accuracy', min_delta=0, patience=10, verbose=0, mode='auto',
+            #     baseline=None, restore_best_weights=False
+            # ),
         ],
         store_partial=False,
     )
