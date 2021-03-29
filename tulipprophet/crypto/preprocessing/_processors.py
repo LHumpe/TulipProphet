@@ -11,10 +11,11 @@ from stockstats import StockDataFrame as Sdf
 
 class CryptoHistoryProphetProcessor:
 
-    def __init__(self, data: pd.DataFrame, tech_indicators: Optional[list] = None):
+    def __init__(self, data: pd.DataFrame, news_data=pd.DataFrame, tech_indicators: Optional[list] = None):
         self.__data = data
         self._prep_data = self.__data.copy()
         self.tech_indicators = tech_indicators
+        self.news_data = news_data
 
     def preprocess_data(self):
         if self.tech_indicators:
@@ -69,21 +70,19 @@ class CryptoHistoryProphetProcessor:
 
         return self
 
-    @staticmethod
-    def train_test_split(data: pd.DataFrame,
+    def train_test_split(self,
                          train_size: float, val_size: float,
                          shuffle_data: bool = False) -> Tuple[Any, Any, Any]:
-        data = data.sort_values(by='date')
+        if shuffle_data:
+            data = shuffle(self._prep_data, random_state=2)
+        else:
+            data = self._prep_data.copy()
+
         data_len = len(data)
 
-        train = data.iloc[0:int(train_size * data_len)]
-        validation = data.iloc[int(train_size * data_len):int(data_len * (train_size + val_size))]
-        test = data.iloc[int(data_len * (train_size + val_size)):]
-
-        if shuffle_data:
-            train = shuffle(train, random_state=2)
-            validation = shuffle(validation, random_state=2)
-            test = shuffle(test, random_state=2)
+        train = self._merge_with_news(data.iloc[0:int(train_size * data_len)])
+        validation = self._merge_with_news(data.iloc[int(train_size * data_len):int(data_len * (train_size + val_size))])
+        test = self._merge_with_news(data.iloc[int(data_len * (train_size + val_size)):])
 
         train.index = train.date.factorize()[0]
         validation.index = validation.date.factorize()[0]
@@ -91,8 +90,8 @@ class CryptoHistoryProphetProcessor:
 
         return train, validation, test
 
-    def merge_with_news(self, news_data: pd.DataFrame) -> pd.DataFrame:
-        return pd.merge(self._prep_data, news_data, how='left', on='date').dropna()
+    def _merge_with_news(self, data: pd.DataFrame) -> pd.DataFrame:
+        return pd.merge(data, self.news_data, how='left', on='date').dropna()
 
     @property
     def prep_data(self) -> pd.DataFrame:
@@ -187,6 +186,7 @@ class CryptoNewsProphetProcessor:
         self._prep_data[self.rel_cols] = self._prep_data[self.rel_cols].applymap(self.replace_punctuation)
         self._prep_data[self.rel_cols] = self._prep_data[self.rel_cols].applymap(self.replace_numbers)
         return self
+    #TODO: Remove single letters
 
     @staticmethod
     def normalize_text(text: str) -> str:

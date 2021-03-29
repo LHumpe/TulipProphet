@@ -11,6 +11,12 @@ gpu_devices = tf.config.experimental.list_physical_devices('GPU')
 for device in gpu_devices:
     tf.config.experimental.set_memory_growth(device, True)
 
+import configparser
+
+config = configparser.ConfigParser()
+config.read('crypto/crypto_config.ini')
+TECH_INDICATORS = config['preprocessing']['technical_indicators'].split(',')
+
 if __name__ == '__main__':
     tf.get_logger().setLevel('WARN')
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -26,19 +32,19 @@ if __name__ == '__main__':
 
     engineer = CryptoHistoryProphetProcessor(
         data=data,
-        tech_indicators=['macd', 'rsi_30', 'cci_30', 'dx_30']
+        tech_indicators=TECH_INDICATORS,
+        news_data=prepped_news_data
     )
     engineer.preprocess_data()
 
-    final_data = engineer.merge_with_news(news_data=prepped_news_data)
-    train_df, val_df, test_df = engineer.train_test_split(final_data, train_size=0.7, val_size=0.2, shuffle_data=True)
+    train_df, val_df, test_df = engineer.train_test_split(train_size=0.7, val_size=0.2, shuffle_data=True)
 
     windows = CryptoWindowGenerator(
         training_data=train_df,
         validation_data=val_df,
         test_data=test_df,
         batch_size=52,
-        indicator_cols=['macd', 'rsi_30', 'cci_30', 'dx_30'],
+        indicator_cols=TECH_INDICATORS,
         word_cols=['title', 'body'],
         label_col=['fall', 'neutral', 'rise'],
     )
@@ -54,21 +60,26 @@ if __name__ == '__main__':
         ttl_max_tokens=ttl_max_tokens,
         seq_title=ttl_seq_len,
         seq_body=bdy_seq_len,
-        indicator_len=len(['macd', 'rsi_30', 'cci_30', 'dx_30']),
+        indicator_len=len(TECH_INDICATORS),
         embedding_dim=16,
-        max_epochs=100,
+        max_epochs=60,
         num_trials=100,
+        tune_dir='/mnt/ShareDrive/Development/Privat/TulipArena/singles/TulipProphet/local_output/tf/second/',
     )
 
     predictor.tune(
         callbacks=[
             tf.keras.callbacks.TensorBoard(
-                log_dir="/mnt/ShareDrive/Development/Privat/TulipArena/singles/TulipProphet/local_output/logdir/tune/",
+                log_dir="/mnt/ShareDrive/Development/Privat/TulipArena/singles/TulipProphet/local_output/logdir/tune/second/",
             ),
             # tf.keras.callbacks.EarlyStopping(
             #     monitor='val_accuracy', min_delta=0, patience=10, verbose=0, mode='auto',
             #     baseline=None, restore_best_weights=False
             # ),
-        ],
-        store_partial=False,
+        ]
     )
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor='val_accuracy', min_delta=0, patience=10, verbose=0, mode='auto',
+        baseline=None, restore_best_weights=False
+    ),
+    predictor.final_model(callbacks=[early_stopping])
