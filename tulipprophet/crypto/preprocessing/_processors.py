@@ -81,7 +81,8 @@ class CryptoHistoryProphetProcessor:
         data_len = len(data)
 
         train = self._merge_with_news(data.iloc[0:int(train_size * data_len)])
-        validation = self._merge_with_news(data.iloc[int(train_size * data_len):int(data_len * (train_size + val_size))])
+        validation = self._merge_with_news(
+            data.iloc[int(train_size * data_len):int(data_len * (train_size + val_size))])
         test = self._merge_with_news(data.iloc[int(data_len * (train_size + val_size)):])
 
         train.index = train.date.factorize()[0]
@@ -99,11 +100,11 @@ class CryptoHistoryProphetProcessor:
 
 
 class CryptoNewsProphetProcessor:
-    def __init__(self, data: pd.DataFrame, cols_to_prepare: List[str]):
+    def __init__(self, data: pd.DataFrame, text_col_short: str, text_col_long: str):
         self.__data = data
         self._prep_data = self.__data.copy()
 
-        self.rel_cols = cols_to_prepare
+        self.rel_cols = [text_col_short, text_col_long]
         self.contractions = {
             "ain't": "am not",
             "aren't": "are not",
@@ -186,7 +187,8 @@ class CryptoNewsProphetProcessor:
         self._prep_data[self.rel_cols] = self._prep_data[self.rel_cols].applymap(self.replace_punctuation)
         self._prep_data[self.rel_cols] = self._prep_data[self.rel_cols].applymap(self.replace_numbers)
         return self
-    #TODO: Remove single letters
+
+    # TODO: Remove single letters
 
     @staticmethod
     def normalize_text(text: str) -> str:
@@ -233,6 +235,18 @@ class CryptoNewsProphetProcessor:
     @staticmethod
     def get_sequence_len(data: pd.DataFrame, threshold: int) -> int:
         return int(np.percentile(data.str.split().apply(len), threshold))
+
+    def calc_vocab_stats(self,
+                         threshold_short: List[int] = [0, 100],
+                         threshold_long: List[int] = [0, 100]) -> Tuple[int, int, int, int]:
+
+        max_t_short = self.get_max_tokens(self._prep_data[self.rel_cols[0]], threshold=threshold_short[0])
+        seq_len_short = self.get_max_tokens(self._prep_data[self.rel_cols[1]], threshold=threshold_short[1])
+
+        max_t_long = self.get_sequence_len(self._prep_data[self.rel_cols[0]], threshold=threshold_long[0])
+        seq_len_long = self.get_sequence_len(self._prep_data[self.rel_cols[1]], threshold=threshold_long[1])
+
+        return max_t_short, seq_len_short, max_t_long, seq_len_long
 
     @property
     def prep_data(self) -> pd.DataFrame:

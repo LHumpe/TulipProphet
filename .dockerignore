@@ -1,0 +1,7 @@
+local_input/
+local_output/
+venv/
+docker_cleanupsh
+.gitignore
+Dockerfile
+docker-compose.yml

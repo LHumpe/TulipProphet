@@ -7,8 +7,8 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 from ..preprocessing import CryptoWindowGenerator
 
 NEWS_EMBEDDINGS_HP_BOUNDS = {
-    'hp_units_bdy': [22, 46, 4],
-    'hp_units_ttl': [42, 50, 4],
+    'hp_units_long': [22, 46, 4],
+    'hp_units_short': [42, 50, 4],
     'hp_units_level_one': [80, 110, 6],
     'hp_dropout_level_one': [0.0, 0.4, 0.2],
     'hp_units_level_two': [20, 32, 4],
@@ -21,124 +21,125 @@ NEWS_EMBEDDINGS_HP_BOUNDS = {
 
 class CryptoDirectionModel:
 
-    def __init__(self, data_generator: CryptoWindowGenerator, seq_title: int, seq_body: int, bdy_max_tokens: int,
-                 ttl_max_tokens: int, embedding_dim: int, indicator_len: int, max_epochs: int, num_trials: int = 1,
-                 tune_dir: Optional[str] = None, project_name: str = 'base'):
+    def __init__(self, data_generator: CryptoWindowGenerator, seq_short: int, seq_long: int, short_max_tokens: int,
+                 long_max_tokens, embedding_dim: int, indicator_len: int, max_epochs: int, version_suffix: str,
+                 num_trials: int = 1, tune_dir: Optional[str] = None, project_name: str = 'base'):
         self.train_df = data_generator.train
         self.val_df = data_generator.val
         self.final_train_df = data_generator.full
         self.test_df = data_generator.test
 
-        self.bdy_max_tokens = bdy_max_tokens
-        self.ttl_max_tokens = ttl_max_tokens
+        self.long_max_tokens = long_max_tokens
+        self.short_max_tokens = short_max_tokens
         self.embedding_dim = embedding_dim
 
         self.indicator_len = indicator_len
 
-        self.seq_ttl = seq_title
-        self.seq_bdy = seq_body
+        self.seq_short = seq_short
+        self.seq_long = seq_long
 
-        self.vec_layer_ttl, self.vec_layer_bdy  = self._initialize_layers()
+        self.vec_layer_short, self.vec_layer_long = self._initialize_layers()
         self.tuner = None
 
         self.max_epochs = max_epochs
         self.hp_space = NEWS_EMBEDDINGS_HP_BOUNDS
         self.num_trials = num_trials
         self.tune_dir = tune_dir
+        self.version_suffix = version_suffix
         self.project_name = project_name
 
         self.best_hyper_parameters = None
 
     def _initialize_layers(self) -> Tuple[TextVectorization, TextVectorization]:
-        vec_layer_ttl = TextVectorization(
+        vec_layer_short = TextVectorization(
             standardize=None,
             pad_to_max_tokens=True,
-            max_tokens=self.ttl_max_tokens,
+            max_tokens=self.short_max_tokens,
             output_mode='int',
-            output_sequence_length=self.seq_ttl)
-        ttl_adapt = self.train_df.map(lambda x, y: x[1])
-        vec_layer_ttl.adapt(ttl_adapt)
+            output_sequence_length=self.seq_short)
+        short_adapt = self.train_df.map(lambda x, y: x[1])
+        vec_layer_short.adapt(short_adapt)
 
-        vec_layer_bdy = TextVectorization(
+        vec_layer_long = TextVectorization(
             standardize=None,
             pad_to_max_tokens=True,
-            max_tokens=self.bdy_max_tokens,
+            max_tokens=self.long_max_tokens,
             output_mode='int',
-            output_sequence_length=self.seq_bdy)
-        bdy_adapt = self.train_df.map(lambda x, y: x[2])
-        vec_layer_bdy.adapt(bdy_adapt)
+            output_sequence_length=self.seq_long)
+        long_adapt = self.train_df.map(lambda x, y: x[2])
+        vec_layer_long.adapt(long_adapt)
 
-        return vec_layer_ttl, vec_layer_bdy
+        return vec_layer_short, vec_layer_long
 
     def _build_model(self, hp) -> tf.keras.Model:
 
         """Body Model"""
-        bdy_model_input = tf.keras.layers.Input(
+        long_model_input = tf.keras.layers.Input(
             shape=(1,),
             dtype=tf.string,
-            name='bdy_input'
+            name='long_input'
         )
 
-        hp_units_bdy = hp.Int(
-            'units_bdy',
-            min_value=self.hp_space['hp_units_bdy'][0],
-            max_value=self.hp_space['hp_units_bdy'][1],
-            step=self.hp_space['hp_units_bdy'][2]
+        hp_units_long = hp.Int(
+            'units_long',
+            min_value=self.hp_space['hp_units_long'][0],
+            max_value=self.hp_space['hp_units_long'][1],
+            step=self.hp_space['hp_units_long'][2]
         )
-        bdy_model = tf.keras.Sequential([
-            self.vec_layer_bdy,
+        long_model = tf.keras.Sequential([
+            self.vec_layer_long,
             tf.keras.layers.Embedding(
-                input_dim=len(self.vec_layer_bdy.get_vocabulary()),
+                input_dim=len(self.vec_layer_long.get_vocabulary()),
                 output_dim=self.embedding_dim,
                 mask_zero=True,
-                name="bdy_embedding"
+                name="long_embedding"
             ),
             tf.keras.layers.Bidirectional(
                 tf.keras.layers.LSTM(
                     units=self.embedding_dim,
                     return_sequences=False,
                 ),
-                name='bdy_bi_lstm'
+                name='long_bi_lstm'
             ),
             tf.keras.layers.Dense(
-                hp_units_bdy,
+                hp_units_long,
                 activation='relu',
-                name='bdy_dense'
+                name='long_dense'
             ),
         ], name='Body')
 
         """Title Model"""
-        ttl_model_input = tf.keras.layers.Input(
+        short_model_input = tf.keras.layers.Input(
             shape=(1,),
             dtype=tf.string,
-            name='ttl_input'
+            name='short_input'
         )
 
-        hp_units_ttl = hp.Int(
+        hp_units_short = hp.Int(
             'units_head',
-            min_value=self.hp_space['hp_units_ttl'][0],
-            max_value=self.hp_space['hp_units_ttl'][1],
-            step=self.hp_space['hp_units_ttl'][2]
+            min_value=self.hp_space['hp_units_short'][0],
+            max_value=self.hp_space['hp_units_short'][1],
+            step=self.hp_space['hp_units_short'][2]
         )
-        ttl_model = tf.keras.Sequential([
-            self.vec_layer_ttl,
+        short_model = tf.keras.Sequential([
+            self.vec_layer_short,
             tf.keras.layers.Embedding(
-                input_dim=len(self.vec_layer_ttl.get_vocabulary()),
+                input_dim=len(self.vec_layer_short.get_vocabulary()),
                 output_dim=self.embedding_dim,
                 mask_zero=True,
-                name="ttl_embedding"
+                name="short_embedding"
             ),
             tf.keras.layers.Bidirectional(
                 tf.keras.layers.LSTM(
                     units=self.embedding_dim,
                     return_sequences=False,
                 ),
-                name='ttl_bi_lstm'
+                name='short_bi_lstm'
             ),
             tf.keras.layers.Dense(
-                hp_units_ttl,
+                hp_units_short,
                 activation='relu',
-                name='ttl_dense'
+                name='short_dense'
             ),
         ], name='Title')
 
@@ -180,8 +181,8 @@ class CryptoDirectionModel:
         """Merged Model"""
         merged = tf.keras.layers.concatenate([
             indicator_model(indicator_model_input),
-            ttl_model(ttl_model_input),
-            bdy_model(bdy_model_input)
+            short_model(short_model_input),
+            long_model(long_model_input)
         ], name='Concatenation')
 
         hp_units_level_one = hp.Int(
@@ -229,8 +230,8 @@ class CryptoDirectionModel:
 
         model = tf.keras.Model([
             indicator_model_input,
-            ttl_model_input,
-            bdy_model_input,
+            short_model_input,
+            long_model_input,
         ],
             output
         )
@@ -268,22 +269,23 @@ class CryptoDirectionModel:
             pass
         return self._tune(callbacks=callbacks)
 
-    def _train_final_model(self, callbacks: list) -> None:
+    def _train_final_model(self, callbacks: list, max_epochs: int) -> None:
+
         final_model = self.tuner.hypermodel.build(self.best_hyper_parameters)
 
         final_model.fit(
             self.final_train_df,
             validation_data=self.test_df,
             callbacks=callbacks,
-            epochs=self.max_epochs
+            epochs=max_epochs
         )
 
-    def final_model(self, callbacks: Optional[list] = None) -> None:
+    def final_model(self, max_epochs: int, callbacks: Optional[list] = None, ) -> None:
         if not callbacks:
             callbacks = list()
 
         model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-            filepath='weights/crypto_model',
+            filepath='../local_output/models/' + self.version_suffix,
             save_weights_only=False,
             monitor='val_accuracy',
             mode='auto',
@@ -292,4 +294,4 @@ class CryptoDirectionModel:
 
         callbacks.append(model_checkpoint_callback)
 
-        self._train_final_model(callbacks=callbacks)
+        self._train_final_model(max_epochs=max_epochs, callbacks=callbacks)

@@ -1,11 +1,10 @@
 FROM python:3.8.6
 
-WORKDIR /app
-
-ENV FLASK_APP=serving/app.py
+ENV FLASK_APP=./code/model_api.py
 ENV FLASK_RUN_HOST=0.0.0.0
 
-COPY ./tulipprophet /app
+ENV MODEL_DIR=trained_models/crypto_model
+
 # Install Python dependencies
 COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt
