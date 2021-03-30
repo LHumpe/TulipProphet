@@ -1,46 +1,50 @@
 import configparser
-import os
-import sys
+import json
 
-import tensorflow as tf
+import requests
 from flask import Flask
 
 from crypto.io import read_kraken_history, read_json_news
-from crypto.preprocessing import CryptoHistoryProphetProcessor, CryptoWindowGenerator, \
-    CryptoNewsProphetProcessor
+from crypto.preprocessing import CryptoHistoryProphetProcessor, CryptoNewsProphetProcessor
 
 config = configparser.ConfigParser()
 config.read('code/crypto/crypto_config.ini')
-TECH_INDICATORS = config['preprocessing']['technical_indicators'].split(',')
+TECH_INDICATORS = config['PREPROCESSING']['technical_indicators'].split(',')
+TEXT_COL_S = config['PREPROCESSING']['text_cols_short']
+TEXT_COL_L = config['PREPROCESSING']['text_col_long']
 
 app = Flask(__name__)
 
 
-@app.route('/predict_btc/')
+@app.route('/predict_direction_btc/')
 def hello_world():
     # TODO: get data from database and enable config
-    news_data = read_json_news('local_input/cointelegraph.json')
-    news_processor = CryptoNewsProphetProcessor(data=news_data, cols_to_prepare=['title', 'body'])
-    news_processor.preprocess_data()
+    tel_data = read_json_news(config['PATHS']['telegraph'], word_cols=[TEXT_COL_S, TEXT_COL_L], with_empty_str=False)
+    news_processor = CryptoNewsProphetProcessor(
+        data=tel_data,
+        text_col_short=TEXT_COL_L,
+        text_col_long=TEXT_COL_L
+    ).preprocess_data()
 
-    data = read_kraken_history('local_input/XBTEUR_1440.csv', tic='BTC')
-    engineer = CryptoHistoryProphetProcessor(data=data,
-                                             tech_indicators=TECH_INDICATORS,
-                                             news_data=news_processor.prep_data)
-    engineer.preprocess_data()
+    data = read_kraken_history(config['PATHS']['price_history'], tic='BTC')
 
-    train_df, val_df, test_df = engineer.train_test_split(train_size=0.7, val_size=0.2, shuffle_data=True)
+    engineer = CryptoHistoryProphetProcessor(
+        data=data,
+        tech_indicators=TECH_INDICATORS,
+        news_data=news_processor.prep_data
+    ).preprocess_data()
 
-    windows = CryptoWindowGenerator(
-        training_data=train_df,
-        validation_data=val_df,
-        test_data=test_df,
-        batch_size=52,
-        indicator_cols=TECH_INDICATORS,
-        word_cols=['title', 'body'],
-        label_col=['fall', 'neutral', 'rise'],
-    )
-    model = tf.keras.models.load_model(os.environ.get('MODEL_DIR'))
-    results = model.predict(windows.test)
-    print(results, file=sys.stdout)
-    return "Done"
+    train_df, val_df, test_df = engineer.train_test_split(train_size=0.7, val_size=0.29, shuffle_data=True)
+
+    data = {
+        "signature_name": "serving_default",
+        "inputs": {
+            'indicator_input': test_df[TECH_INDICATORS].values.tolist(),
+            'short_input': test_df['title'].values.reshape(-1, 1).tolist(),
+            'long_input': test_df['body'].values.reshape(-1, 1).tolist()
+        }
+    }
+
+    response = requests.post('http://tensorflow-servings:8501/v1/models/direction:predict', data=json.dumps(data))
+
+    return response.json()

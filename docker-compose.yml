@@ -1,6 +1,6 @@
 version: "3.9"  # optional since v1.27.0
 services:
-  web:
+  predapi:
     build: .
     image: prophetapi
     ports:
@@ -9,5 +9,16 @@ services:
       FLASK_ENV: development
     volumes:
     - ./tulipprophet:/code
-    - ./local_output/weights:/trained_models
     - ./local_input:/local_input
+  tensorflow-servings:
+    image: tensorflow/serving:latest
+    ports:
+      - 8500:8500
+      - 8501:8501
+    command:
+      - --model_base_path=/models/
+      - --model_name=direction
+    volumes:
+      - ./local_output/models:/models
+
+
