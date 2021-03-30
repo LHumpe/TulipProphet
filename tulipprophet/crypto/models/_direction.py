@@ -1,3 +1,4 @@
+import os
 from typing import Optional, Tuple
 
 import kerastuner as kt
@@ -7,6 +8,8 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 from ..preprocessing import CryptoWindowGenerator
 
 NEWS_EMBEDDINGS_HP_BOUNDS = {
+    'hp_embedding_dim_short': [8, 32, 4],
+    'hp_embedding_dim_long': [8, 32, 4],
     'hp_units_long': [22, 46, 4],
     'hp_units_short': [42, 50, 4],
     'hp_units_level_one': [80, 110, 6],
@@ -22,9 +25,8 @@ NEWS_EMBEDDINGS_HP_BOUNDS = {
 class CryptoDirectionModel:
 
     def __init__(self, data_generator: CryptoWindowGenerator, seq_short: int, seq_long: int, short_max_tokens: int,
-                 long_max_tokens, embedding_dim: int, indicator_len: int, max_epochs: int, version_suffix: str,
-                 num_trials: int = 1, tune_dir: Optional[str] = None, project_name: str = 'base',
-                 activation: str = 'sigmoid', overwrite: bool = True):
+                 long_max_tokens, indicator_len: int, max_epochs: int, version_suffix: str,
+                 num_trials: int = 1, tune_dir: Optional[str] = None, overwrite: bool = True):
         self.train_df = data_generator.train
         self.val_df = data_generator.val
         self.final_train_df = data_generator.full
@@ -32,7 +34,6 @@ class CryptoDirectionModel:
 
         self.long_max_tokens = long_max_tokens
         self.short_max_tokens = short_max_tokens
-        self.embedding_dim = embedding_dim
 
         self.indicator_len = indicator_len
 
@@ -47,11 +48,9 @@ class CryptoDirectionModel:
         self.num_trials = num_trials
         self.tune_dir = tune_dir
         self.version_suffix = version_suffix
-        self.project_name = project_name
 
         self.best_hyper_parameters = None
 
-        self.final_activation = activation
         self.overwrite = overwrite
 
     def _initialize_layers(self) -> Tuple[TextVectorization, TextVectorization]:
@@ -87,7 +86,12 @@ class CryptoDirectionModel:
             dtype=tf.string,
             name='long_input'
         )
-
+        hp_embedding_dim_long = hp.Int(
+            'embedding_dim_long',
+            min_value=self.hp_space['hp_embedding_dim_long'][0],
+            max_value=self.hp_space['hp_embedding_dim_long'][1],
+            step=self.hp_space['hp_embedding_dim_long'][2]
+        )
         hp_units_long = hp.Int(
             'units_long',
             min_value=self.hp_space['hp_units_long'][0],
@@ -98,13 +102,13 @@ class CryptoDirectionModel:
             self.vec_layer_long,
             tf.keras.layers.Embedding(
                 input_dim=len(self.vec_layer_long.get_vocabulary()),
-                output_dim=self.embedding_dim,
+                output_dim=hp_embedding_dim_long,
                 mask_zero=True,
                 name="long_embedding"
             ),
             tf.keras.layers.Bidirectional(
                 tf.keras.layers.LSTM(
-                    units=self.embedding_dim,
+                    units=hp_embedding_dim_long,
                     return_sequences=False,
                 ),
                 name='long_bi_lstm'
@@ -122,9 +126,14 @@ class CryptoDirectionModel:
             dtype=tf.string,
             name='short_input'
         )
-
+        hp_embedding_dim_short = hp.Int(
+            'embedding_dim_short',
+            min_value=self.hp_space['hp_embedding_dim_short'][0],
+            max_value=self.hp_space['hp_embedding_dim_short'][1],
+            step=self.hp_space['hp_embedding_dim_short'][2]
+        )
         hp_units_short = hp.Int(
-            'units_head',
+            'units_short',
             min_value=self.hp_space['hp_units_short'][0],
             max_value=self.hp_space['hp_units_short'][1],
             step=self.hp_space['hp_units_short'][2]
@@ -133,13 +142,13 @@ class CryptoDirectionModel:
             self.vec_layer_short,
             tf.keras.layers.Embedding(
                 input_dim=len(self.vec_layer_short.get_vocabulary()),
-                output_dim=self.embedding_dim,
+                output_dim=hp_embedding_dim_short,
                 mask_zero=True,
                 name="short_embedding"
             ),
             tf.keras.layers.Bidirectional(
                 tf.keras.layers.LSTM(
-                    units=self.embedding_dim,
+                    units=hp_embedding_dim_short,
                     return_sequences=False,
                 ),
                 name='short_bi_lstm'
@@ -229,7 +238,7 @@ class CryptoDirectionModel:
         hp_l2_reg = hp.Choice('l2_reg', values=self.hp_space['hp_dropout_l2'])
         output = tf.keras.layers.Dense(
             3,
-            activation=self.final_activation,
+            activation='softmax',
             kernel_regularizer=tf.keras.regularizers.l1_l2(l1=hp_l1_reg, l2=hp_l2_reg),
             bias_regularizer=tf.keras.regularizers.l1_l2(l1=hp_l1_reg, l2=hp_l2_reg),
             activity_regularizer=tf.keras.regularizers.l1_l2(l1=hp_l1_reg, l2=hp_l2_reg),
@@ -257,7 +266,7 @@ class CryptoDirectionModel:
                                   objective='val_accuracy',
                                   overwrite=self.overwrite,
                                   directory=self.tune_dir,
-                                  project_name=self.project_name,
+                                  project_name=self.version_suffix,
                                   max_epochs=self.max_epochs
                                   )
         self.tuner.search(
@@ -270,11 +279,13 @@ class CryptoDirectionModel:
 
         return self
 
-    def tune(self, callbacks: list = None):
-        if not callbacks:
-            callbacks = []
-        else:
-            pass
+    def tune(self, log_dir: Optional[str] = None):
+        callbacks = list()
+
+        if log_dir:
+            logging_callback = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(log_dir, self.version_suffix))
+            callbacks.append(logging_callback)
+
         return self._tune(callbacks=callbacks)
 
     def _train_final_model(self, callbacks: list, max_epochs: int) -> None:
@@ -288,18 +299,31 @@ class CryptoDirectionModel:
             epochs=max_epochs
         )
 
-    def final_model(self, max_epochs: int, callbacks: Optional[list] = None) -> None:
-        if not callbacks:
-            callbacks = list()
+    def final_model(self, max_epochs: int, model_dir: Optional[str] = None, log_dir: Optional[str] = None,
+                    patience: Optional[int] = None) -> None:
+        callbacks = list()
 
-        model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-            filepath='../local_output/models/' + self.version_suffix,
-            save_weights_only=False,
-            monitor='val_accuracy',
-            mode='auto',
-            save_format='tf',
-            save_best_only=True)
+        if log_dir:
+            logging_callback = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(log_dir, self.version_suffix))
+            callbacks.append(logging_callback)
 
-        callbacks.append(model_checkpoint_callback)
+        if patience:
+            early_stopping = tf.keras.callbacks.EarlyStopping(
+                monitor='val_accuracy', min_delta=0, patience=patience, verbose=1, mode='auto',
+                baseline=None, restore_best_weights=True
+            )
+            callbacks.append(early_stopping)
+
+        if model_dir:
+            model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+                filepath=os.path.join(model_dir, self.version_suffix),
+                save_weights_only=False,
+                monitor='val_accuracy',
+                mode='auto',
+                save_format='tf',
+                save_best_only=True
+            )
+
+            callbacks.append(model_checkpoint_callback)
 
         self._train_final_model(max_epochs=max_epochs, callbacks=callbacks)

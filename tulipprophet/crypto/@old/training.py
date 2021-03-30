@@ -19,8 +19,8 @@ TEXT_COL_S = config['PREPROCESSING']['text_cols_short']
 TEXT_COL_L = config['PREPROCESSING']['text_col_long']
 
 if __name__ == '__main__':
-    tel_data = read_json_news(config['PATHS']['telegraph'], word_cols=[TEXT_COL_S, TEXT_COL_L], with_empty_str=False)
-    desk_data = read_json_news(config['PATHS']['desk'], word_cols=[TEXT_COL_S, TEXT_COL_L], with_empty_str=True)
+    tel_data = read_json_news(config['PATHS']['telegraph'], word_cols=[TEXT_COL_S, TEXT_COL_L])
+    desk_data = read_json_news(config['PATHS']['desk'], word_cols=[TEXT_COL_S, TEXT_COL_L])
 
     news_data = pd.concat([tel_data, desk_data], axis=0, ignore_index=True)
 

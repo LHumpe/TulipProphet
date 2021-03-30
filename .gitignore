@@ -15,3 +15,6 @@
 
 # Docker Cleanup file
 /docker_cleanup.sh
+
+# Build Files
+/TulipProphet.egg-info/

@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 
-def read_json_news(path: str, word_cols=List[str], with_empty_str: bool = False) -> pd.DataFrame:
+def read_json_news(path: str, word_cols=List[str]) -> pd.DataFrame:
     # Load json file
     with open(path) as file:
         json_data = json.load(file)
@@ -13,8 +13,8 @@ def read_json_news(path: str, word_cols=List[str], with_empty_str: bool = False)
     # Convert json to DF
     df = pd.DataFrame.from_dict(data=json_data)
 
-    if with_empty_str:
-        df = df.replace('', np.nan).dropna(subset=word_cols)
+    # Remove rows containing empty strings in relevant columns
+    df = df.replace('', np.nan).dropna(subset=word_cols)
 
     # Cast time to datetime
     df['date'] = pd.to_datetime(df['date'])

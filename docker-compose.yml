@@ -8,8 +8,7 @@ services:
     environment:
       FLASK_ENV: development
     volumes:
-    - ./tulipprophet:/code
-    - ./local_input:/local_input
+    - ./prophet_api:/code
   tensorflow-servings:
     image: tensorflow/serving:latest
     ports:
