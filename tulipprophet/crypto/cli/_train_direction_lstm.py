@@ -11,13 +11,24 @@ from ..preprocessing import CryptoHistoryProphetProcessor, CryptoWindowGenerator
 
 @click.command()
 @click.option('--config_path', required=True, type=click.Path(exists=True))
-def _train_direction_lstm(config_path: str):
+def _train_direction_lstm(config_path: str) -> None:
+    """
+    CLI endpoint to train, tune and save the direction model for cryptocurrencies.
 
-    # Import the config file
+    Parameters
+    ----------
+    config_path : str
+        Path to config file containing the required parameters.
+
+    Returns
+    -------
+    None
+    """
+    # import and read the config file
     config = configparser.ConfigParser()
     config.read(config_path)
 
-    # Extract parameters for readability
+    # extract parameters for readability
     TECH_INDICATORS = config['PREPROCESSING']['technical_indicators'].split(',')
     TEXT_COL_S = config['PREPROCESSING']['text_cols_short']
     TEXT_COL_L = config['PREPROCESSING']['text_col_long']
@@ -33,15 +44,13 @@ def _train_direction_lstm(config_path: str):
     NUM_TRIALS = config.getint('MODEL_CONFIG', 'num_trials')
     BATCH_SIZE = config.getint('MODEL_CONFIG', 'batch_size')
     OVERWRITE = config.getboolean('MODEL_CONFIG', 'overwrite')
-    PATIENCE = config.getboolean('MODEL_CONFIG', 'early_stopping_patience')
+    PATIENCE = config.getint('MODEL_CONFIG', 'early_stopping_patience')
 
+    # create news data from all specified files and preprocess
     single_news_frames = []
     for path in NEWS_PATHS:
         single_news_frames.append(read_json_news(path, word_cols=[TEXT_COL_S, TEXT_COL_L]))
-
-    news_data = pd.concat(single_news_frames, axis=1, ignore_index=True)
-
-    data = read_kraken_history(config['PATHS']['price_history'], tic='BTC')
+    news_data = pd.concat(single_news_frames, axis=0, ignore_index=True)
 
     news_processor = CryptoNewsProphetProcessor(
         data=news_data,
@@ -49,14 +58,19 @@ def _train_direction_lstm(config_path: str):
         text_col_long=TEXT_COL_L
     ).preprocess_data()
 
+    # import and preprocess price data
+    data = read_kraken_history(config['PATHS']['price_history'])
+
     engineer = CryptoHistoryProphetProcessor(
         data=data,
         tech_indicators=TECH_INDICATORS,
         news_data=news_processor.prep_data
     ).preprocess_data()
 
+    # train, test, validation split for tuning and final training
     train_df, val_df, test_df = engineer.train_test_split(train_size=0.7, val_size=0.2, shuffle_data=True)
 
+    # create batch dataset for better performance
     windows = CryptoWindowGenerator(
         training_data=train_df,
         validation_data=val_df,
@@ -67,13 +81,16 @@ def _train_direction_lstm(config_path: str):
         label_col=['fall', 'neutral', 'rise'],
     )
 
+    # get statistics of words e.g. sequence length and number of unique words
     bdy_max_tokens, ttl_max_tokens, bdy_seq_len, ttl_seq_len = news_processor.calc_vocab_stats()
 
+    # initialize the model
     predictor = CryptoDirectionModel(data_generator=windows, seq_short=ttl_seq_len, seq_long=bdy_seq_len,
                                      long_max_tokens=bdy_max_tokens, short_max_tokens=ttl_max_tokens,
                                      indicator_len=len(TECH_INDICATORS), max_epochs=MAX_EPOCHS, num_trials=NUM_TRIALS,
                                      tune_dir=TUNE_DIR, overwrite=OVERWRITE, version_suffix=VERSION_SUFFIX)
-
+    # tune the model
     predictor.tune(log_dir=LOG_DIR)
 
+    # train and save the final model
     predictor.final_model(max_epochs=MAX_FINAL_EPOCHS, model_dir=MODEL_DIR, log_dir=LOG_DIR, patience=PATIENCE)

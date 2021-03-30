@@ -13,5 +13,6 @@ def cli():
     pass
 
 
+"""Add new sub-commands here"""
 cli.add_command(_train_direction_lstm, name='lstm_direction_training')
 cli.add_command(_extract_direction_embeddings, name='lstm_direction_embeddings')

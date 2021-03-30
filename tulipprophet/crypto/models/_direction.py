@@ -7,7 +7,13 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 
 from ..preprocessing import CryptoWindowGenerator
 
+gpu_devices = tf.config.experimental.list_physical_devices('GPU')
+for device in gpu_devices:
+    tf.config.experimental.set_memory_growth(device, True)
+
+"""Change these values to change hyper-parameter search space"""
 NEWS_EMBEDDINGS_HP_BOUNDS = {
+    # Range parameters i.e. [min, max, step]
     'hp_embedding_dim_short': [8, 32, 4],
     'hp_embedding_dim_long': [8, 32, 4],
     'hp_units_long': [22, 46, 4],
@@ -16,6 +22,7 @@ NEWS_EMBEDDINGS_HP_BOUNDS = {
     'hp_dropout_level_one': [0.0, 0.4, 0.2],
     'hp_units_level_two': [20, 32, 4],
     'hp_dropout_level_two': [0.6, 0.8, 0.1],
+    # Choice parameters i.e. [option1, option2, option3]
     'hp_dropout_l1': [0.0, 1e-2, 1e-3, 1e-4],
     'hp_dropout_l2': [0.0, 1e-2, 1e-3, 1e-4],
     'hp_learning_rate': [1e-4, 1e-5],
@@ -23,10 +30,53 @@ NEWS_EMBEDDINGS_HP_BOUNDS = {
 
 
 class CryptoDirectionModel:
+    """Neural Network Model for the classification of a falling, neutral, rising price of currencies.
 
-    def __init__(self, data_generator: CryptoWindowGenerator, seq_short: int, seq_long: int, short_max_tokens: int,
-                 long_max_tokens, indicator_len: int, max_epochs: int, version_suffix: str,
-                 num_trials: int = 1, tune_dir: Optional[str] = None, overwrite: bool = True):
+    This model ingests three different data streams:
+    1. Technical Indicators
+        These are technical indicators that are commonly used in trading environments such as the MACD.
+    2. Short Textual Data
+        This represents textual data that is short in length e.g. titles, descriptions
+    3. Long Textual Data
+        This represents the body of the news articles
+
+    The network architecture is build to train a simple dense model on the technical features and to train word
+    embeddings utilizing bi-directional lstm nodes on the textual features. For each feature there is a separated model
+    which gets gets merged in the end.
+
+    Parameters
+    ----------
+    data_generator : CryptoWindowGenerator
+        Data Generator returning the different datasets created with tf.data api.
+    seq_short : int
+        Maximum sequence length to allow for the short textual input stream.
+    seq_long : int
+        Maximum sequence length to allow for the long textual input stream.
+    short_max_tokens : int
+        Maximum tokens for the text-vectorization layer to consider the short textual input stream.
+    long_max_tokens
+    indicator_len : int
+        Maximum tokens for the text-vectorization layer to consider the long textual input stream.
+    max_epochs : int
+        Maximum number of possible epochs to train each model for during tuning.
+    num_trials : int
+        Maximum number of different hyper-parameter combinations to try.
+    version_suffix : str
+        Number of version to append to the all logging directory paths for versioning.
+    tune_dir : str
+        Path to directory where tuning data should be stored.
+    overwrite : bool
+        Whether to overwrite existing tuning files. When False starts a complete new hyper-parameter serach. When True
+        continues where it left of last time.
+    """
+
+    def __init__(self,
+                 data_generator: CryptoWindowGenerator,  # Data
+                 seq_short: int, seq_long: int, short_max_tokens: int, long_max_tokens: int,  # Vocab Stats
+                 indicator_len: int,  # Indicator Stats
+                 max_epochs: int, num_trials: int,  # Training Configuration
+                 version_suffix: str, tune_dir: Optional[str] = None, overwrite: bool = True  # Logging Configuration
+                 ):
         self.train_df = data_generator.train
         self.val_df = data_generator.val
         self.final_train_df = data_generator.full
