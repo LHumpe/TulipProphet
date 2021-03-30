@@ -188,8 +188,6 @@ class CryptoNewsProphetProcessor:
         self._prep_data[self.rel_cols] = self._prep_data[self.rel_cols].applymap(self.replace_numbers)
         return self
 
-    # TODO: Remove single letters
-
     @staticmethod
     def normalize_text(text: str) -> str:
         text = unicodedata.normalize("NFKD", text)

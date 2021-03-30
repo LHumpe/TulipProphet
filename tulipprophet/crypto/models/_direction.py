@@ -23,7 +23,8 @@ class CryptoDirectionModel:
 
     def __init__(self, data_generator: CryptoWindowGenerator, seq_short: int, seq_long: int, short_max_tokens: int,
                  long_max_tokens, embedding_dim: int, indicator_len: int, max_epochs: int, version_suffix: str,
-                 num_trials: int = 1, tune_dir: Optional[str] = None, project_name: str = 'base'):
+                 num_trials: int = 1, tune_dir: Optional[str] = None, project_name: str = 'base',
+                 activation: str = 'sigmoid', overwrite: bool = True):
         self.train_df = data_generator.train
         self.val_df = data_generator.val
         self.final_train_df = data_generator.full
@@ -50,13 +51,18 @@ class CryptoDirectionModel:
 
         self.best_hyper_parameters = None
 
+        self.final_activation = activation
+        self.overwrite = overwrite
+
     def _initialize_layers(self) -> Tuple[TextVectorization, TextVectorization]:
         vec_layer_short = TextVectorization(
             standardize=None,
             pad_to_max_tokens=True,
             max_tokens=self.short_max_tokens,
             output_mode='int',
-            output_sequence_length=self.seq_short)
+            output_sequence_length=self.seq_short,
+            name='short_text_vec'
+        )
         short_adapt = self.train_df.map(lambda x, y: x[1])
         vec_layer_short.adapt(short_adapt)
 
@@ -65,7 +71,9 @@ class CryptoDirectionModel:
             pad_to_max_tokens=True,
             max_tokens=self.long_max_tokens,
             output_mode='int',
-            output_sequence_length=self.seq_long)
+            output_sequence_length=self.seq_long,
+            name='long_text_vec'
+        )
         long_adapt = self.train_df.map(lambda x, y: x[2])
         vec_layer_long.adapt(long_adapt)
 
@@ -106,7 +114,7 @@ class CryptoDirectionModel:
                 activation='relu',
                 name='long_dense'
             ),
-        ], name='Body')
+        ], name='long')
 
         """Title Model"""
         short_model_input = tf.keras.layers.Input(
@@ -141,7 +149,7 @@ class CryptoDirectionModel:
                 activation='relu',
                 name='short_dense'
             ),
-        ], name='Title')
+        ], name='short')
 
         """Indicator Model"""
         indicator_model_input = tf.keras.layers.Input(
@@ -221,7 +229,7 @@ class CryptoDirectionModel:
         hp_l2_reg = hp.Choice('l2_reg', values=self.hp_space['hp_dropout_l2'])
         output = tf.keras.layers.Dense(
             3,
-            activation='sigmoid',
+            activation=self.final_activation,
             kernel_regularizer=tf.keras.regularizers.l1_l2(l1=hp_l1_reg, l2=hp_l2_reg),
             bias_regularizer=tf.keras.regularizers.l1_l2(l1=hp_l1_reg, l2=hp_l2_reg),
             activity_regularizer=tf.keras.regularizers.l1_l2(l1=hp_l1_reg, l2=hp_l2_reg),
@@ -247,7 +255,7 @@ class CryptoDirectionModel:
     def _tune(self, callbacks: list):
         self.tuner = kt.Hyperband(self._build_model,
                                   objective='val_accuracy',
-                                  overwrite=True,
+                                  overwrite=self.overwrite,
                                   directory=self.tune_dir,
                                   project_name=self.project_name,
                                   max_epochs=self.max_epochs
@@ -280,7 +288,7 @@ class CryptoDirectionModel:
             epochs=max_epochs
         )
 
-    def final_model(self, max_epochs: int, callbacks: Optional[list] = None, ) -> None:
+    def final_model(self, max_epochs: int, callbacks: Optional[list] = None) -> None:
         if not callbacks:
             callbacks = list()
 

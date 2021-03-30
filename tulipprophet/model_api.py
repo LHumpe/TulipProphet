@@ -15,9 +15,10 @@ TECH_INDICATORS = config['preprocessing']['technical_indicators'].split(',')
 
 app = Flask(__name__)
 
+
 @app.route('/predict_btc/')
 def hello_world():
-    #TODO: get data from database and enable config
+    # TODO: get data from database and enable config
     news_data = read_json_news('local_input/cointelegraph.json')
     news_processor = CryptoNewsProphetProcessor(data=news_data, cols_to_prepare=['title', 'body'])
     news_processor.preprocess_data()

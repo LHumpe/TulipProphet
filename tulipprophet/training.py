@@ -14,9 +14,9 @@ import configparser
 
 config = configparser.ConfigParser()
 config.read('crypto/crypto_config.ini')
-TECH_INDICATORS = config['preprocessing']['technical_indicators'].split(',')
-TEXT_COL_S = config['preprocessing']['text_cols_short']
-TEXT_COL_L = config['preprocessing']['text_col_long']
+TECH_INDICATORS = config['PREPROCESSING']['technical_indicators'].split(',')
+TEXT_COL_S = config['PREPROCESSING']['text_cols_short']
+TEXT_COL_L = config['PREPROCESSING']['text_col_long']
 
 if __name__ == '__main__':
     tel_data = read_json_news(config['PATHS']['telegraph'], word_cols=[TEXT_COL_S, TEXT_COL_L], with_empty_str=False)
@@ -44,7 +44,7 @@ if __name__ == '__main__':
         training_data=train_df,
         validation_data=val_df,
         test_data=test_df,
-        batch_size=52,
+        batch_size=200,
         indicator_cols=TECH_INDICATORS,
         word_cols=[TEXT_COL_S, TEXT_COL_L],
         label_col=['fall', 'neutral', 'rise'],
@@ -54,15 +54,16 @@ if __name__ == '__main__':
 
     predictor = CryptoDirectionModel(data_generator=windows, seq_short=ttl_seq_len, seq_long=bdy_seq_len,
                                      long_max_tokens=bdy_max_tokens, short_max_tokens=ttl_max_tokens, embedding_dim=16,
-                                     indicator_len=len(TECH_INDICATORS), max_epochs=5, num_trials=10,
-                                     tune_dir='../local_output/tf/', version_suffix="V2")
+                                     indicator_len=len(TECH_INDICATORS), max_epochs=50, num_trials=200,
+                                     project_name='V1', activation='softmax', tune_dir='../local_output/tf/',
+                                     overwrite=True, version_suffix="V1")
 
-    logging_callback = tf.keras.callbacks.TensorBoard(log_dir="../local_output/logdir/lstm/")
+    logging_callback = tf.keras.callbacks.TensorBoard(log_dir="../local_output/logdir/V1/")
     early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor='val_accuracy', min_delta=0, patience=20, verbose=0, mode='auto',
+        monitor='val_accuracy', min_delta=0, patience=100, verbose=1, mode='auto',
         baseline=None, restore_best_weights=True
     )
 
     predictor.tune(callbacks=[logging_callback])
 
-    predictor.final_model(max_epochs=1000, callbacks=[early_stopping])
+    predictor.final_model(max_epochs=1000, callbacks=[early_stopping, logging_callback])
