@@ -268,6 +268,8 @@ class CryptoNewsProphetProcessor:
         text = unicodedata.normalize("NFKD", text)
         text = text.replace(b'\xe2\x80\x94'.decode('utf-8'), '--')
         text = re.sub(r'\n\s*\n', '', text)
+        text = re.sub(r'\r', '', text)
+        text = re.sub(r'\n', '', text)
         return text
 
     def replace_contractions(self, text: str) -> str:
@@ -280,13 +282,14 @@ class CryptoNewsProphetProcessor:
     def replace_punctuation(text: str) -> str:
         """Replace punctuation with whitespaces."""
         for punct in "/-'":
-            text = text.replace(punct, ' ')
+            text = text.replace(punct, '')
         for punct in '&':
             text = text.replace(punct, 'and')
-        for punct in '?!.,"#$%\'()*+-/:;<=>@[\\]^_`{|}~‘' + '“”’':
+        for punct in '?!.,"#$%\'()*+–/:;<=>@[\\]^_`{|}~‘' + '““’':
             text = text.replace(punct, '')
 
         text = re.sub(' +', ' ', text)
+        text = re.sub('” ', ' ', text)
         return text
 
     @staticmethod
@@ -346,10 +349,10 @@ class CryptoNewsProphetProcessor:
         max_sequence_length = int(np.percentile(data.str.split().apply(len), threshold))
         return max_sequence_length
 
-    def calc_vocab_stats(self, threshold_short: Optional[List[int, int]] = None,
-                         threshold_long: Optional[List[int, int]] = None) -> Tuple[int, int, int, int]:
+    def calc_vocab_stats(self, threshold_short: Optional[List[int]] = None,
+                         threshold_long: Optional[List[int]] = None) -> Tuple[int, int, int, int]:
         """
-        Wrapper to return the relevant textual parameters during training. Threshholds are used to reduce unnecessary
+        Wrapper to return the relevant textual parameters during training. Thresholds are used to reduce unnecessary
         training time e.g. when only one sequence in the short word column is 1000 words long and the rest only five
         words long.
 
@@ -362,11 +365,11 @@ class CryptoNewsProphetProcessor:
                                 resulting percentile.
         """
 
-        if threshold_long is None:
-            threshold_long = [0, 100]
-
         if threshold_short is None:
             threshold_short = [0, 100]
+
+        if threshold_long is None:
+            threshold_long = [0, 100]
 
         max_t_short = self.get_max_tokens(self._prep_data[self.rel_cols[0]], threshold=threshold_short[0])
         seq_len_short = self.get_max_tokens(self._prep_data[self.rel_cols[1]], threshold=threshold_short[1])
