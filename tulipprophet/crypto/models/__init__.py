@@ -1,1 +1,1 @@
-from ._direction import CryptoDirectionModel
+from ._direction import CryptoLstmDirectionModel

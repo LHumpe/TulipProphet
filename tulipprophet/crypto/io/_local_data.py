@@ -7,19 +7,19 @@ import pandas as pd
 
 def read_json_news(path: str, word_cols=List[str]) -> pd.DataFrame:
     """
-    Import and format news data from .json files.
+    Import and format news price_data from .json files.
 
     Parameters
     ----------
     path : str
         Path to the .json file.
     word_cols :
-        Columns that contain the relevant textual data.
+        Columns that contain the relevant textual price_data.
 
     Returns
     -------
     df : pd.DataFrame
-        DataFrame that contains properly formatted news data
+        DataFrame that contains properly formatted news price_data
     """
     # load json file
     with open(path) as file:
@@ -39,21 +39,21 @@ def read_json_news(path: str, word_cols=List[str]) -> pd.DataFrame:
 
 def read_kraken_history(path: str, tic: str = 'Coin') -> pd.DataFrame:
     """
-    Import and format historical price data from the kraken exchange.
+    Import and format historical price price_data from the kraken exchange.
 
     Parameters
     ----------
     path : str
-        Path to the historic price data
+        Path to the historic price price_data
     tic : str
         Identifier for the currency. Important when training the model on many currencies e.g. in indicator calculation
 
     Returns
     -------
     df : pd.DataFrame
-        DataFrame that contains properly formatted historic price data
+        DataFrame that contains properly formatted historic price price_data
     """
-    # import data
+    # import price_data
     df = pd.read_csv(path, names=['date', 'open', 'high', 'low', 'close', 'volume', 'amount'])
     df = df[['date', 'open', 'close', 'high', 'low', 'volume', 'amount']]
 

@@ -1,2 +1,2 @@
-from ._data_generator import CryptoWindowGenerator
+from ._data_generator import CryptoDirectionGenerator
 from ._processors import CryptoHistoryProphetProcessor, CryptoNewsProphetProcessor
