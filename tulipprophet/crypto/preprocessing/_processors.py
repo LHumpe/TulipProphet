@@ -86,7 +86,7 @@ class CryptoHistoryProphetProcessor:
                 indicator_df = indicator_df.append(temp_indicator, ignore_index=True)
 
             self._prep_data[indicator] = indicator_df
-            self._prep_data.dropna(inplace=True)
+    	self._prep_data.dropna(inplace=True)
 
         return self
 
